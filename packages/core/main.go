@@ -114,7 +114,9 @@ func main() {
 			}
 		}
 	}
-	input.OnSubmitted = func(content string) { window.Canvas().Focus(list) }
+	input.OnSubmitted = func(content string) {
+		window.Canvas().Focus(list)
+	}
 
 	content := container.NewVBox(input, scrollableList)
 	content.Resize(window.Content().Size())
