@@ -13,6 +13,25 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
+func fileScan(pathChannel chan string, searchTerm string) {
+	walkFn := func(path string, _ fs.DirEntry, err error) error {
+		if err != nil {
+			close(pathChannel)
+			return err
+		}
+		if strings.Contains(path, searchTerm) {
+			pathChannel <- path
+		}
+		return nil
+	}
+
+	cwd, _ := filepath.Abs("..")
+	if err := filepath.WalkDir(cwd, walkFn); err != nil {
+		close(pathChannel)
+		log.Fatal(err.Error())
+	}
+}
+
 func main() {
 	a := app.New()
 
@@ -55,27 +74,14 @@ func main() {
 			return
 		}
 
-		walkFn := func(path string, _ fs.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-			if strings.Contains(path, searchTerm) {
-				if err := dirList.Append(path); err != nil {
-					return err
-				}
-				scrollableList.Resize(
-					fyne.NewSize(input.Size().Width, float32(dirList.Length()*100)),
-				)
-			}
-			return nil
-		}
+		pathChannel := make(chan string)
+		go fileScan(pathChannel, searchTerm)
 
-		go func() {
-			cwd, _ := filepath.Abs(".")
-			if err := filepath.WalkDir(cwd, walkFn); err != nil {
-				log.Fatal(err.Error())
+		for path := range pathChannel {
+			if err := dirList.Append(path); err != nil {
+				log.Fatal(err)
 			}
-		}()
+		}
 	}
 	input.OnSubmitted = func(content string) {
 		window.Canvas().Focus(list)
