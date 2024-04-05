@@ -16,7 +16,7 @@ import (
 type empty struct{}
 
 func fileScan(searchTerm string, pathChannel chan<- string, abortChannel <-chan empty) {
-	cwd, err := filepath.Abs("..")
+	cwd, err := filepath.Abs(".")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -56,7 +56,7 @@ func main() {
 		}
 	})
 	window.SetPadded(false)
-	window.Resize(fyne.NewSize(1000, 200))
+	window.Resize(fyne.NewSize(1000, 400))
 	window.CenterOnScreen()
 
 	dirList := binding.NewStringList()
@@ -73,21 +73,23 @@ func main() {
 			}
 		},
 	)
-	list.Resize(
-		fyne.NewSize(window.Canvas().Size().Width, window.Canvas().Size().Height-100),
-	)
 	scrollableList := container.NewVScroll(list)
+	scrollableList.Hide()
 
 	abortFileScanChannel := make(chan empty)
 
 	input := widget.NewEntry()
-	input.Resize(fyne.NewSize(window.Canvas().Size().Width, 100))
 	input.OnChanged = func(searchTerm string) {
 		if err := dirList.Set([]string{}); err != nil {
 			log.Fatal(err.Error())
 		}
+
+		searchTerm = strings.Trim(searchTerm, " ")
 		if searchTerm == "" {
+			scrollableList.Hide()
 			return
+		} else {
+			scrollableList.Show()
 		}
 
 		pathChannel := make(chan string)
@@ -98,10 +100,11 @@ func main() {
 				log.Fatal(err)
 			}
 		}
+		scrollableList.Resize(
+			fyne.NewSize(window.Canvas().Size().Width, window.Canvas().Size().Height-50),
+		)
 	}
-	input.OnSubmitted = func(content string) {
-		window.Canvas().Focus(list)
-	}
+	input.OnSubmitted = func(content string) { window.Canvas().Focus(list) }
 
 	content := container.NewVBox(input, scrollableList)
 	content.Resize(window.Canvas().Size())
