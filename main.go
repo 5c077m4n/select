@@ -13,23 +13,37 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
-func fileScan(pathChannel chan string, searchTerm string) {
+type empty struct{}
+
+func fileScan(searchTerm string, pathChannel chan<- string, abortChannel <-chan empty) {
+	cwd, err := filepath.Abs("..")
+	if err != nil {
+		log.Fatal(err)
+	}
 	walkFn := func(path string, _ fs.DirEntry, err error) error {
-		if err != nil {
-			close(pathChannel)
-			return err
+		for {
+			select {
+			case <-abortChannel:
+				close(pathChannel)
+				return filepath.SkipAll
+			default:
+				if err != nil {
+					close(pathChannel)
+					return err
+				}
+
+				if strings.Contains(path, searchTerm) {
+					pathChannel <- path
+				}
+				return nil
+			}
 		}
-		if strings.Contains(path, searchTerm) {
-			pathChannel <- path
-		}
-		return nil
 	}
 
-	cwd, _ := filepath.Abs("..")
 	if err := filepath.WalkDir(cwd, walkFn); err != nil {
-		close(pathChannel)
 		log.Fatal(err.Error())
 	}
+	close(pathChannel)
 }
 
 func main() {
@@ -64,6 +78,8 @@ func main() {
 	)
 	scrollableList := container.NewVScroll(list)
 
+	abortFileScanChannel := make(chan empty)
+
 	input := widget.NewEntry()
 	input.Resize(fyne.NewSize(window.Canvas().Size().Width, 100))
 	input.OnChanged = func(searchTerm string) {
@@ -75,7 +91,7 @@ func main() {
 		}
 
 		pathChannel := make(chan string)
-		go fileScan(pathChannel, searchTerm)
+		go fileScan(searchTerm, pathChannel, abortFileScanChannel)
 
 		for path := range pathChannel {
 			if err := dirList.Append(path); err != nil {
