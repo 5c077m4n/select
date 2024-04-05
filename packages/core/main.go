@@ -1,9 +1,10 @@
 package main
 
 import (
-	"io/fs"
+	"context"
+	_ "embed"
+	"encoding/json"
 	"log"
-	"path/filepath"
 	"strings"
 
 	"fyne.io/fyne/v2"
@@ -11,6 +12,8 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/widget"
+	"github.com/tetratelabs/wazero"
+	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 )
 
 type empty struct{}
@@ -20,35 +23,74 @@ const (
 	HEIGHT = 400
 )
 
-func fileScan(searchTerm string, pathChannel chan<- string, abortChannel <-chan empty) {
-	cwd, err := filepath.Abs(".")
+//go:embed plugins/file-find.wasm
+var pluginWASM []byte
+
+func fileScan(searchTerm string) []string {
+	ctx := context.Background()
+
+	wasmRuntime := wazero.NewRuntime(ctx)
+	defer wasmRuntime.Close(ctx)
+	wasi_snapshot_preview1.MustInstantiate(ctx, wasmRuntime)
+
+	mod, err := wasmRuntime.Instantiate(ctx, pluginWASM)
+	if err != nil {
+		log.Fatalf("failed to start module: %v", err)
+	}
+
+	malloc := mod.ExportedFunction("malloc")
+	free := mod.ExportedFunction("free")
+
+	searchTermSize := uint64(len(searchTerm))
+	results, err := malloc.Call(ctx, searchTermSize)
 	if err != nil {
 		log.Fatal(err)
 	}
-	walkFn := func(path string, _ fs.DirEntry, err error) error {
-		for {
-			select {
-			case <-abortChannel:
-				close(pathChannel)
-				return filepath.SkipAll
-			default:
-				if err != nil {
-					close(pathChannel)
-					return err
-				}
+	searchTermPointer := results[0]
+	defer free.Call(ctx, searchTermPointer)
 
-				if strings.Contains(path, searchTerm) {
-					pathChannel <- path
-				}
-				return nil
+	if !mod.Memory().Write(uint32(searchTermPointer), []byte(searchTerm)) {
+		log.Fatalf(
+			"Memory.Write(%d, %d) out of range of memory size %d",
+			searchTermPointer,
+			searchTermSize,
+			mod.Memory().Size(),
+		)
+	}
+
+	search := mod.ExportedFunction("search")
+	pointerSize, err := search.Call(ctx, searchTermPointer, searchTermSize)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	matchesPointer := uint32(pointerSize[0] >> 32)
+	matchesSize := uint32(pointerSize[0])
+
+	if matchesPointer != 0 {
+		defer func() {
+			if _, err := free.Call(ctx, uint64(matchesPointer)); err != nil {
+				log.Fatal(err)
 			}
-		}
+		}()
 	}
 
-	if err := filepath.WalkDir(cwd, walkFn); err != nil {
-		log.Fatal(err.Error())
+	bytes, ok := mod.Memory().Read(matchesPointer, matchesSize)
+	if !ok {
+		log.Fatalf(
+			"Memory.Read(%d, %d) out of range of memory size %d",
+			matchesPointer,
+			matchesSize,
+			mod.Memory().Size(),
+		)
 	}
-	close(pathChannel)
+
+	var matches []string
+	if err := json.Unmarshal(bytes, &matches); err != nil {
+		log.Fatal(err)
+	}
+
+	return matches
 }
 
 func main() {
@@ -83,8 +125,6 @@ func main() {
 	scrollableList := container.NewVScroll(list)
 	scrollableList.Hide()
 
-	abortFileScanChannel := make(chan empty)
-
 	input := widget.NewEntry()
 	input.OnChanged = func(searchTerm string) {
 		if err := dirList.Set([]string{}); err != nil {
@@ -105,14 +145,8 @@ func main() {
 			)
 		}
 
-		pathChannel := make(chan string)
-		go fileScan(searchTerm, pathChannel, abortFileScanChannel)
-
-		for path := range pathChannel {
-			if err := dirList.Append(path); err != nil {
-				log.Fatal(err)
-			}
-		}
+		paths := fileScan(searchTerm)
+		dirList.Set(paths)
 	}
 	input.OnSubmitted = func(content string) {
 		window.Canvas().Focus(list)
