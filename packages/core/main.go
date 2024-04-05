@@ -15,6 +15,11 @@ import (
 
 type empty struct{}
 
+const (
+	WIDTH  = 1000
+	HEIGHT = 400
+)
+
 func fileScan(searchTerm string, pathChannel chan<- string, abortChannel <-chan empty) {
 	cwd, err := filepath.Abs(".")
 	if err != nil {
@@ -56,8 +61,10 @@ func main() {
 		}
 	})
 	window.SetPadded(false)
-	window.Resize(fyne.NewSize(1000, 400))
+	window.Resize(fyne.NewSize(WIDTH, HEIGHT))
 	window.CenterOnScreen()
+	window.SetFixedSize(true)
+	window.SetMaster()
 
 	dirList := binding.NewStringList()
 	list := widget.NewListWithData(
@@ -90,6 +97,12 @@ func main() {
 			return
 		} else {
 			scrollableList.Show()
+			scrollableList.Resize(
+				fyne.NewSize(
+					window.Canvas().Size().Width,
+					window.Canvas().Size().Height-input.Size().Height,
+				),
+			)
 		}
 
 		pathChannel := make(chan string)
@@ -100,14 +113,11 @@ func main() {
 				log.Fatal(err)
 			}
 		}
-		scrollableList.Resize(
-			fyne.NewSize(window.Canvas().Size().Width, window.Canvas().Size().Height-50),
-		)
 	}
 	input.OnSubmitted = func(content string) { window.Canvas().Focus(list) }
 
 	content := container.NewVBox(input, scrollableList)
-	content.Resize(window.Canvas().Size())
+	content.Resize(window.Content().Size())
 
 	window.SetContent(content)
 	window.Canvas().Focus(input)
