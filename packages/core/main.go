@@ -4,6 +4,7 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
+	"fmt"
 	"log"
 	"strings"
 
@@ -13,6 +14,7 @@ import (
 	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/widget"
 	"github.com/tetratelabs/wazero"
+	"github.com/tetratelabs/wazero/api"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 )
 
@@ -26,11 +28,30 @@ const (
 //go:embed plugins/file-find.wasm
 var pluginWASM []byte
 
+func logString(_ context.Context, m api.Module, offset, byteCount uint32) {
+	if buf, ok := m.Memory().Read(offset, byteCount); ok {
+		fmt.Println(string(buf))
+	} else {
+		log.Fatalf("Memory.Read(%d, %d) out of range", offset, byteCount)
+	}
+}
+
 func fileScan(searchTerm string) []string {
 	ctx := context.Background()
 
 	wasmRuntime := wazero.NewRuntime(ctx)
 	defer wasmRuntime.Close(ctx)
+
+	_, err := wasmRuntime.
+		NewHostModuleBuilder("env").
+		NewFunctionBuilder().
+		WithFunc(logString).
+		Export("log").
+		Instantiate(ctx)
+	if err != nil {
+		log.Panicln(err)
+	}
+
 	wasi_snapshot_preview1.MustInstantiate(ctx, wasmRuntime)
 
 	mod, err := wasmRuntime.Instantiate(ctx, pluginWASM)
