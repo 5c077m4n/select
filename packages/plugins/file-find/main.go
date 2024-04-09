@@ -27,8 +27,7 @@ func log(baseMsg string, parts ...any) {
 
 // ptrToString returns a string from WebAssembly compatible numeric types representing its pointer and length.
 func ptrToString(ptr uint32, size uint32) string {
-	unsafePtr := unsafe.Pointer(uintptr(ptr))
-	return unsafe.String((*byte)(unsafePtr), size)
+	return unsafe.String((*byte)(unsafe.Pointer(uintptr(ptr))), size)
 }
 
 // stringToPtr returns a pointer and size pair for the given string in a way compatible with WebAssembly numeric types.
