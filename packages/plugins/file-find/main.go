@@ -5,10 +5,25 @@ import "C"
 
 import (
 	"encoding/json"
-	"log"
+	"fmt"
 	"path/filepath"
+	"runtime"
 	"unsafe"
 )
+
+// _log is a WebAssembly import which prints a string (linear memory offset, byteCount) to the console.
+//
+//go:wasmimport env log
+func _log(ptr, size uint32)
+
+// log a message to the console using _log.
+func log(baseMsg string, parts ...any) {
+	msg := fmt.Sprintf("[WASM] "+baseMsg, parts)
+
+	ptr, size := stringToPtr(msg)
+	_log(ptr, size)
+	runtime.KeepAlive(msg) // keep message alive until ptr is no longer needed.
+}
 
 // ptrToString returns a string from WebAssembly compatible numeric types representing its pointer and length.
 func ptrToString(ptr uint32, size uint32) string {
@@ -35,15 +50,15 @@ func stringToLeakedPtr(s string) (uint32, uint32) {
 func _search(glob string) string {
 	matches, err := filepath.Glob(glob)
 	if err != nil {
-		log.Panicf("Could not complete the file search: %v", err)
+		panic(err)
 	}
 
-	jsonb, err := json.Marshal(matches)
+	jsonBin, err := json.Marshal(matches)
 	if err != nil {
-		log.Panic(err)
+		panic(err)
 	}
 
-	return string(jsonb)
+	return string(jsonBin)
 }
 
 // search is a WebAssembly export that accepts a string pointer (linear memory offset) and returns a pointer/size pair packed into a uint64.
@@ -51,10 +66,10 @@ func _search(glob string) string {
 // NOTE: This uses a uint64 instead of two result values for compatibility with WebAssembly 1.0.
 //
 //export search
-func search(ptr, size uint32) (ptrSize uint64) {
+func search(ptr, size uint32) uint64 {
 	name := ptrToString(ptr, size)
-	g := _search(name)
-	ptr, size = stringToLeakedPtr(g)
+	matchesStr := _search(name)
+	ptr, size = stringToLeakedPtr(matchesStr)
 	return (uint64(ptr) << uint64(32)) | uint64(size)
 }
 
