@@ -28,19 +28,18 @@ const (
 //go:embed plugins/file-find.wasm
 var pluginWASM []byte
 
-func logString(_ context.Context, m api.Module, offset, byteCount uint32) {
-	if buf, ok := m.Memory().Read(offset, byteCount); ok {
+func logString(_ context.Context, mod api.Module, offset, byteCount uint32) {
+	if buf, ok := mod.Memory().Read(offset, byteCount); ok {
 		fmt.Println(string(buf))
 	} else {
 		log.Fatalf("Memory.Read(%d, %d) out of range", offset, byteCount)
 	}
 }
 
-func fileScan(searchTerm string) []string {
+func initPluginSystem() (wazero.Runtime, api.Module, context.Context) {
 	ctx := context.Background()
 
 	wasmRuntime := wazero.NewRuntime(ctx)
-	defer wasmRuntime.Close(ctx)
 
 	_, err := wasmRuntime.
 		NewHostModuleBuilder("env").
@@ -59,6 +58,10 @@ func fileScan(searchTerm string) []string {
 		log.Fatalf("failed to start module: %v", err)
 	}
 
+	return wasmRuntime, mod, ctx
+}
+
+func fileScan(mod api.Module, ctx context.Context, searchTerm string) []string {
 	malloc := mod.ExportedFunction("malloc")
 	free := mod.ExportedFunction("free")
 
@@ -146,6 +149,9 @@ func main() {
 	scrollableList := container.NewVScroll(list)
 	scrollableList.Hide()
 
+	wasmRuntime, mod, ctx := initPluginSystem()
+	defer wasmRuntime.Close(ctx)
+
 	input := widget.NewEntry()
 	input.OnChanged = func(searchTerm string) {
 		if err := dirList.Set([]string{}); err != nil {
@@ -156,17 +162,17 @@ func main() {
 		if searchTerm == "" {
 			scrollableList.Hide()
 			return
-		} else {
-			scrollableList.Show()
-			scrollableList.Resize(
-				fyne.NewSize(
-					window.Canvas().Size().Width,
-					window.Canvas().Size().Height-input.Size().Height,
-				),
-			)
 		}
 
-		paths := fileScan(searchTerm)
+		scrollableList.Resize(
+			fyne.NewSize(
+				window.Canvas().Size().Width,
+				window.Canvas().Size().Height-input.Size().Height,
+			),
+		)
+		scrollableList.Show()
+
+		paths := fileScan(mod, ctx, searchTerm)
 		dirList.Set(paths)
 	}
 	input.OnSubmitted = func(content string) {
