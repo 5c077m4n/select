@@ -1,4 +1,3 @@
 #!/usr/bin/env sh
 
-go list -f '{{.Dir}}' -m | xargs -L1 go mod tidy -C
-go list -f '{{.Dir}}' -m | xargs -L1 go work sync -C
+go mod tidy

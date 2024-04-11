@@ -1,8 +1,0 @@
-#!/usr/bin/env fish
-
-for plugin_src_dir in packages/plugins/*
-    set --local plugin_out_dir packages/core/plugins
-
-    mkdir -p $plugin_out_dir
-    tinygo build -o $plugin_out_dir/(basename $plugin_src_dir).wasm -target=wasi $plugin_src_dir/main.go
-end
