@@ -49,6 +49,15 @@ func main() {
 			}
 		},
 	)
+	list.OnSelected = func(id int) {
+		selected, err := dirList.GetValue(id)
+		if err != nil {
+			log.Fatalln(err)
+		}
+
+		log.Println(selected)
+		window.Close()
+	}
 	scrollableList := container.NewVScroll(list)
 	scrollableList.Hide()
 
@@ -64,24 +73,24 @@ func main() {
 			return
 		}
 
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		pathsChannel := make(chan string)
+		go filescan.FileScan("..", searchTerm, pathsChannel, ctx)
+
 		scrollableList.Resize(
 			fyne.NewSize(
 				window.Canvas().Size().Width,
 				window.Canvas().Size().Height-input.Size().Height,
 			),
 		)
-
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-
-		pathsChannel := make(chan string)
-		go filescan.FileScan(".", searchTerm, pathsChannel, ctx)
+		scrollableList.Show()
 
 		for path := range pathsChannel {
 			dirList.Append(path)
+			list.Refresh()
 		}
-
-		scrollableList.Show()
 	}
 	input.OnSubmitted = func(content string) {
 		window.Canvas().Focus(list)
