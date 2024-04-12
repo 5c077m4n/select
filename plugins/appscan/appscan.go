@@ -1,3 +1,4 @@
+// Package appscan Scans installed apps (MacOS only for now)
 package appscan
 
 import (
@@ -6,6 +7,7 @@ import (
 	"strings"
 )
 
+// AppScan scans installed app in MacOS (for now)
 func AppScan(searchTerm string, appsChannel chan<- string) {
 	defer close(appsChannel)
 

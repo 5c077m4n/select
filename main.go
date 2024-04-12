@@ -1,3 +1,4 @@
+// main
 package main
 
 import (
@@ -17,8 +18,8 @@ import (
 )
 
 const (
-	WIDTH  = 1000
-	HEIGHT = 400
+	width  = 1000
+	height = 400
 )
 
 func main() {
@@ -31,7 +32,7 @@ func main() {
 		}
 	})
 	window.SetPadded(false)
-	window.Resize(fyne.NewSize(WIDTH, HEIGHT))
+	window.Resize(fyne.NewSize(width, height))
 	window.CenterOnScreen()
 	window.SetFixedSize(true)
 	window.SetMaster()
@@ -81,7 +82,7 @@ func main() {
 		defer cancel()
 
 		pathsChannel := make(chan string, 100)
-		go filescan.FileScan(".", searchTerm, pathsChannel, ctx)
+		go filescan.FileScan(ctx, ".", searchTerm, pathsChannel)
 
 		scrollableList.Resize(
 			fyne.NewSize(
@@ -100,7 +101,7 @@ func main() {
 
 		list.Refresh()
 	}
-	input.OnSubmitted = func(content string) {
+	input.OnSubmitted = func(_content string) {
 		window.Canvas().Focus(list)
 	}
 

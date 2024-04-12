@@ -1,3 +1,4 @@
+// Package filescan scans files
 package filescan
 
 import (
@@ -8,10 +9,15 @@ import (
 	"strings"
 )
 
-func FileScan(root, searchTerm string, pathsChannel chan<- string, ctx context.Context) {
+// FileScan scans files
+func FileScan(ctx context.Context, root, searchTerm string, pathsChannel chan<- string) {
 	defer close(pathsChannel)
 
 	visit := func(path string, _ fs.DirEntry, err error) error {
+		if err != nil {
+			log.Fatalln(err)
+		}
+
 		select {
 		case <-ctx.Done():
 			log.Println("[file scan] Timeout")
