@@ -8,17 +8,21 @@ import (
 	"strings"
 )
 
-func FileScan(root, searchTerm string, pathChannel chan<- string, ctx context.Context) {
-	defer close(pathChannel)
+func FileScan(root, searchTerm string, pathsChannel chan<- string, ctx context.Context) {
+	defer close(pathsChannel)
 
-	visit := func(path string, dirEntry fs.DirEntry, err error) error {
+	visit := func(path string, _ fs.DirEntry, err error) error {
 		select {
 		case <-ctx.Done():
 			log.Println("[file scan] Timeout")
 			return filepath.SkipAll
 		default:
-			if strings.Contains(path, searchTerm) {
-				pathChannel <- path
+			if !strings.Contains(path, ".git/") && strings.Contains(path, searchTerm) {
+				select {
+				case pathsChannel <- path:
+				default:
+					return filepath.SkipAll
+				}
 			}
 			return nil
 		}

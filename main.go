@@ -4,6 +4,7 @@ import (
 	"context"
 	_ "embed"
 	"log"
+	"select/plugins/appscan"
 	"select/plugins/filescan"
 	"strings"
 	"time"
@@ -73,11 +74,14 @@ func main() {
 			return
 		}
 
+		appsChannel := make(chan string, 100)
+		go appscan.AppScan(searchTerm, appsChannel)
+
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
-		pathsChannel := make(chan string)
-		go filescan.FileScan("..", searchTerm, pathsChannel, ctx)
+		pathsChannel := make(chan string, 100)
+		go filescan.FileScan(".", searchTerm, pathsChannel, ctx)
 
 		scrollableList.Resize(
 			fyne.NewSize(
@@ -87,10 +91,14 @@ func main() {
 		)
 		scrollableList.Show()
 
+		for app := range appsChannel {
+			dirList.Append(app)
+		}
 		for path := range pathsChannel {
 			dirList.Append(path)
-			list.Refresh()
 		}
+
+		list.Refresh()
 	}
 	input.OnSubmitted = func(content string) {
 		window.Canvas().Focus(list)
